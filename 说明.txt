@@ -1,0 +1,42 @@
+
+im16为混响所用到的混响源
+
+只支持16KHz，单通道，16位的wav文件
+
+apTest.cpp为所有功能的测试文件
+
+
+一、傅里叶变换用到两种工具：
+	1、fftwarp，该工具包含avsmallft.h、avsmallft.c、fftwarp.h、fftwarp.c四个文件。在降噪DeNoise（）函数中用到。
+	2、kiss_fft,该工具包含_kiss_fft_guts.h、kiss_fft.h、kiss_fft.c、kiss_fftr.h、kiss_fftr.c五个文件。该程序的其他功能函数都是利用kiss_fft实现傅里叶变换。
+
+二、wav文件读取工具：
+	C++文件，分别是WavReader和WavWrite，为了方便调用，我自己写了wavRandW接口文件。
+
+三、降噪DeNoise（）函数： ------更新了新的降噪方法DeNoise_martin()
+	调用wavRandW接口文件
+	以及降噪的主处理文件ns
+
+四、均衡器EQ1（）和EQ2（）注：EQ1已经被移除
+	调用wavRandW接口文件
+	EQ1和EQ2的主处理程序都在EQ1（）和EQ2（）中
+
+五、基音修改程序PandFshift（）
+	此处的基于修改程序主要是先修改音频的时长然后利用重采样修改音高，以保证修改后的音高时长不变
+	调用wavRanW接口文件
+	、TimeScaling时长修改文件
+	以及Resample重采样文件
+
+六、时长修改程序TimeMod()
+	调用wavRanW接口文件
+	以及TimeScaling时长修改文件
+
+七、限制器 limiter1（）和limiter2（）注：limiter1已经被移除
+	调用wavRanW接口文件
+	均在各自函数中
+
+
+八、压缩器compressing（） 
+	调用compressor和wavRandW文件
+
+九、混响器Reverb_conv()
