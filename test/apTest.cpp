@@ -13,8 +13,9 @@ int main()
 	//ap->Resample("/home/lin/11.wav", "/home/lin/lll2.wav", a);//��Ҫ������Ƶ���ݵĳ���Ly
 	//delete ap;
 	aptool *ap = new aptool();
+    ap->TimeScaling("/home/lin/HS-works/音频处理/AudioProcessingTool/APtoolC/data/wavfile/inputfiles/女声唱歌.wav","/home/lin/HS-works/音频处理/AudioProcessingTool/APtoolC/女声唱歌17.wav",1.7);
 	string name = "/home/lin/HS-works/音频处理/AudioProcessingTool/APtoolC/data/config file examples/param_test.txt";
-	ap->ProcesseByOrder(name, "/home/lin/HS-works/音频处理/AudioProcessingTool/APtoolC/data/wavfile/inputfiles/1.wav", "/home/lin/HS-works/音频处理/AudioProcessingTool/APtoolC/lll2.wav", "/home/lin/HS-works/音频处理/AudioProcessingTool/APtoolC/data/wavfile/im16/");
+	//ap->ProcesseByOrder(name, "/home/lin/HS-works/音频处理/AudioProcessingTool/APtoolC/data/wavfile/inputfiles/女声唱歌.wav", "/home/lin/HS-works/音频处理/AudioProcessingTool/APtoolC/女声唱歌2.wav", "/home/lin/HS-works/音频处理/AudioProcessingTool/APtoolC/data/wavfile/im16/");
 	//ap->ProcesseByOrder(name, "/home/lin/1.wav", "/home/lin/lll2.wav", "data/wavfile/m16/");
 	//test
 	//int a = 0;

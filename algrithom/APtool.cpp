@@ -951,7 +951,7 @@ void aptool::TimeScaling(const char *in, const char *out, const double rate) {//
 	ty = Time_Scaling(x, Lx, ratio);
 
 
-	y1 = (short int *)malloc(sizeof(short int)*Lty); assert(y1);
+    y1 = (short int *)calloc(Lty,sizeof(short int)); assert(y1);
 	for (i = 0; i < Lty; i++)
 		*(y1 + i) = round(ty[i] * 32768.0);
 	wav->outbit = wav->inbit;

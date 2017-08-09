@@ -5,6 +5,7 @@ im16为混响所用到的混响源
 
 apTest.cpp为所有功能的测试文件
 
+wav读取部分有bug,读取音频会在后面增加一小段噪声
 
 一、傅里叶变换用到两种工具：
 	1、fftwarp，该工具包含avsmallft.h、avsmallft.c、fftwarp.h、fftwarp.c四个文件。在降噪DeNoise（）函数中用到。
