@@ -6,15 +6,50 @@
 #include <string>
 using namespace std;
 
+
+short int clip(int a){
+    if (a&(~0xFFFF)) return (-a)>>31;
+    else             return a;
+}
+
 int main()
 {
 	double a = 44100.0/16000.0;
+    double ac[8] = { 0,0,0,-10,0,0,0,0 }, ac2[10] = { 0,0,0,6,18 * 0.6,0,0,0,0,0 }, Q[10] = { 2,2,2,2,2,2,2,2,2,2 };
+    wavRandW wav,wav1;
+    wav.wavRead("/home/lin/HS-works/HSproject/AudioProcessingTool/APtoolC/data/wavfile/inputfiles/1.wav");
+    wav1.wavRead("/home/lin/HS-works/HSproject/AudioProcessingTool/APtoolC/data/wavfile/im16/Vocal_Duo_cut.wav");
+    aptool ap(wav.infs,wav.inbit);
+    int Lx = wav.indatasize / 2;
+    vector<short> input(wav.indata,wav.indata+Lx),output,im(wav1.indata,wav1.indata+wav1.indatasize/2);
+    while(1){
+    //ap.ReverbConv(input,im,0.05,1,output);
+    //ap.Compressing(input,3, -6, 10, 10,output);
+    //ap.Gain(input,output,6.);
+    //ap.Delay(input, 0.4,output);
+        // ap.EQ2(input,ac2,Q,output);
+        //ap.DeNoiseMartin(input,20.,output);
+        //ap.PandFshift(input,0.8,output);
+        //ap.TimeScaling(input,0.8,output);
+    //ap.Limiter2(input, -3, 1., -10, -0.001,output);
+        ap.Robotization(input,1,100,300,output);
+        //ap.Whisper(input,20,output);
+        //ap.VivratoProcesse(input,5,0.01,output);
+        //ap.FormantChange(input,2.,output);
+        break;
+    }
+    wav.outdatasize = output.size();
+    wav.outbit=wav.inbit;
+    wav.outfs = wav.infs;
+    wav.outdata = &output[0];
+    wav.wavWrite("/home/lin/out.wav");
+
 	//aptool *ap = new aptool();
 	//ap->Resample("/home/lin/11.wav", "/home/lin/lll2.wav", a);//��Ҫ������Ƶ���ݵĳ���Ly
 	//delete ap;
-	aptool *ap = new aptool();
-    ap->TimeScaling("/home/lin/HS-works/音频处理/AudioProcessingTool/APtoolC/data/wavfile/inputfiles/女声唱歌.wav","/home/lin/HS-works/音频处理/AudioProcessingTool/APtoolC/女声唱歌17.wav",1.7);
-	string name = "/home/lin/HS-works/音频处理/AudioProcessingTool/APtoolC/data/config file examples/param_test.txt";
+	//aptool *ap = new aptool();
+   // ap->TimeScaling("/home/lin/HS-works/HSproject/AudioProcessingTool/APtoolC/data/wavfile/inputfiles/女声唱歌.wav","/home/lin/HS-works/HSproject/AudioProcessingTool/APtoolC/女声唱歌17.wav",1.7);
+	//string name = "/home/lin/HS-works/HSproject/AudioProcessingTool/APtoolC/data/config file examples/param_test.txt";
 	//ap->ProcesseByOrder(name, "/home/lin/HS-works/音频处理/AudioProcessingTool/APtoolC/data/wavfile/inputfiles/女声唱歌.wav", "/home/lin/HS-works/音频处理/AudioProcessingTool/APtoolC/女声唱歌2.wav", "/home/lin/HS-works/音频处理/AudioProcessingTool/APtoolC/data/wavfile/im16/");
 	//ap->ProcesseByOrder(name, "/home/lin/1.wav", "/home/lin/lll2.wav", "data/wavfile/m16/");
 	//test
@@ -164,5 +199,10 @@ int main()
 		free(y); y = NULL;
 	}*/
 	//delete ap;
+
+
+
+
+
 	return 0;
 }

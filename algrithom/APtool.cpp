@@ -13,7 +13,7 @@
 #include "SignalBasicFunc.h"
 #include "FormantShift.h"
 
-
+#include <algorithm>
 #include<ctype.h>
 #include <iostream>
 #include <fstream>
@@ -21,10 +21,13 @@
 #include <vector>
 using namespace std;
 
-aptool::aptool() {}
+aptool::aptool(const int fs,const int bit):fs(fs),norm(powf(2.,(float)bit-1.)) {}
 aptool::~aptool() {
 
 }
+
+
+
 
 std::string GetFileCString(std::string filepath)
 {
@@ -99,12 +102,12 @@ void processAll(std::string filebuffer, std::string in_wav_file, std::string out
 	//�ڸú��������ǲ��ã�yout=Denoise(y);free(y);yout=y; ��һ��ʽ��
 
 	double ac[8] = { 0,0,0,-10,0,0,0,0 }, ac2[10] = { 0,0,0,0,10 * 0.6,0,0,0,0,0 }, Q[10] = { 2,2,2,2,2,2,2,2,2,2 };
-	int Lx, Ly = 0, Lh,fs=16000,nbit=16;
+	int Lx, Ly = 0, Lh;
 	short *y,*yout;
 	wavRandW *wav = new wavRandW();
-	aptool *ap = new aptool();
-	wav->outbit = nbit;
-	wav->outfs = fs;
+	aptool *ap = new aptool(wav->infs,wav->inbit);
+	wav->outbit = wav->inbit;
+	wav->outfs = wav->infs;
 	wav->wavRead((in_wav_file).c_str());
 	Lx = wav->indatasize / 2;
 	y = (short*)calloc(Lx, sizeof(short));
@@ -264,7 +267,7 @@ void processAll(std::string filebuffer, std::string in_wav_file, std::string out
 		if (subparams.first == "robot")
 		{
 
-			yout = ap->Robotization(y, Lx, atoi(buf[2].c_str()),fs,atof(buf[3].c_str()),atoi(buf[4].c_str()));
+			yout = ap->Robotization(y, Lx, atoi(buf[2].c_str()),wav->infs,atof(buf[3].c_str()),atoi(buf[4].c_str()));
 			
 			if (y) { free(y); y = NULL; }
 			y = yout;
@@ -278,7 +281,7 @@ void processAll(std::string filebuffer, std::string in_wav_file, std::string out
 		}
 		if (subparams.first == "vibrato")
 		{
-			yout = ap->VibratoProcesse(y, Lx,fs, atof(buf[2].c_str()), atof(buf[3].c_str()));
+			yout = ap->VibratoProcesse(y, Lx,wav->infs, atof(buf[2].c_str()), atof(buf[3].c_str()));
 
 			if (y) { free(y); y = NULL; }
 			y = yout;
@@ -353,7 +356,7 @@ void aptool::Resample(const char *in, const char *out, const double rate){
 	x = (double*)malloc(sizeof(double)*Lx); assert(x);
 
 	for (i = 0; i < Lx; i++)
-		*(x + i) = *(wav->indata + i) / 32768.0;
+		*(x + i) = *(wav->indata + i) / norm;
 
 	Lty = Lx;
 
@@ -363,9 +366,9 @@ void aptool::Resample(const char *in, const char *out, const double rate){
 	for (i = 0; i < Lpy; i++)
 		if (ymax < fabs(py[i])) ymax = fabs(py[i]);
 	for(i =0;i<Lpy;i++)
-		*(y1 + i) = py[i]/(ymax+0.3) * 32768.0;
+		*(y1 + i) = py[i]/(ymax+0.3) * norm;
 	wav->outbit = wav->inbit;
-	wav->outfs = 16000;
+	wav->outfs = fs;
 	wav->outdatasize = Lpy;
 	wav->outdata = y1;
 	wav->wavWrite(out);//��Ƶ���
@@ -433,7 +436,7 @@ void aptool::DeNoiseMartin(const char *in, const char* out)
 }
 short int* aptool::DeNoiseMartin(short int *input, const int Lx,double theta) {
 	double ftmp = 0,ymax=0,*y_f;
-	int nLen = 512, fs = 16000, i;
+	int nLen = 512, i;
 	short int *y;
 	short int szPcm[512] = { 0 };
 	for (i = 0; i < Lx; i++)
@@ -467,13 +470,13 @@ short int* aptool::DeNoiseMartin(short int *input, const int Lx,double theta) {
 	y_f = (double*)calloc(Lx, sizeof(double)); assert(y_f);
 	for (i = 0; i < Lx; i++)
 	{
-		y_f[i] = y[i] / 32768.0;
+		y_f[i] = y[i] / norm;
 		if (ymax < fabs(y_f[i])) ymax = fabs(y_f[i]);
 	}
 		for (i = 0; i < Lx; i++)
 		{
 			y_f[i] /= (ymax+0.3);
-			y[i] = y_f[i] * 32768.0;
+			y[i] = y_f[i] * norm;
 		}
 		if (y_f != NULL) {
 			free(y_f); y_f = NULL;
@@ -481,6 +484,65 @@ short int* aptool::DeNoiseMartin(short int *input, const int Lx,double theta) {
 	NoiseReductionDestroy(pInst);
 	pInst = NULL;
 	return y;
+}
+
+
+void aptool::DeNoiseMartin(  const vector<short> &input,const double theta,vector<short>&output){
+    double ftmp = 0,ymax=0,*y_f;
+    int nLen = 512, i,Lx=input.size();
+    short int *y;
+    short int szPcm[512] = { 0 };
+    vector<short> input1(input);
+    for (i = 0; i < Lx; i++)
+    {
+        ftmp += input[i];
+    }
+    ftmp /= Lx;
+
+    for (i = 0; i < Lx; i++)
+        input1[i] -= ftmp;
+
+
+    NoiseReduction *pInst = NoiseReductionCreate_martin(fs, nLen,theta);assert(0 != pInst);
+    y = (short int*)calloc(Lx, sizeof(short int)); assert(y);
+    memset(y, 0, sizeof(short int)*Lx);
+
+    // printf("��ʼ����...\n");
+    int nReadLen = nLen;
+    int count = 0, Nframe = Lx / nLen;
+    pInst->adapt_count = 0;
+    for (count = 0; count<Nframe; count++)
+    {
+
+        memcpy(szPcm, &input1[0]+count*nLen, sizeof(short int)*nLen);
+
+        NoiseReductionProcess_martin(pInst, szPcm);
+        memcpy(y + count*nLen, szPcm, sizeof(short int)*nLen);
+
+    }
+    //printf("������ɣ�\n");
+    y_f = (double*)calloc(Lx, sizeof(double)); assert(y_f);
+    for (i = 0; i < Lx; i++)
+    {
+        y_f[i] = y[i] / norm;
+        if (ymax < fabs(y_f[i])) ymax = fabs(y_f[i]);
+    }
+    for (i = 0; i < Lx; i++)
+    {
+        y_f[i] /= (ymax+0.3);
+        output[i] = y_f[i] * norm;
+    }
+
+    //output.assign(y,y+Lx);
+
+    if (y_f != NULL) {
+        free(y_f); y_f = NULL;
+    }
+    if (y != NULL) {
+        free(y); y = NULL;
+    }
+    NoiseReductionDestroy(pInst);
+    pInst = NULL;
 }
 
 void aptool::DeNoise(const char *in, const char* out)
@@ -547,7 +609,7 @@ void aptool::DeNoise(const char *in, const char* out)
 short int* aptool::DeNoise(const short int *input, const int Lx)
 {//����
 	double ymax = 0,*y_f;
-	int nLen = 512, i,fs = 16000;
+	int nLen = 512, i;
 	short int *y;
 	NoiseReduction *pInst = NoiseReductionCreate(fs, nLen);
 	y = (short int*)malloc(sizeof(short int)*Lx); assert(y);
@@ -788,7 +850,7 @@ short int* aptool::EQ2(const short int *input, const int Lx, const double *ac, c
 		fi[10] = { 31,63,125,250,500,1000,2000,4000,8000,160000 };
 
 
-	int i, k, Ly, fs = 16000;
+	int i, k, Ly;
 	short int *y1, NumBand = 10;
 
 
@@ -801,7 +863,7 @@ short int* aptool::EQ2(const short int *input, const int Lx, const double *ac, c
 	for (i = 0; i < NumBand; i++)
 		wi[i] = 2 * M_PI*fi[i] / fs;
 	for (i = 0; i < Lx; i++)
-		*(x + i) = *(input + i) / 32768.0;
+		*(x + i) = *(input + i) / norm;
 
 	memcpy(temp, x, sizeof(double)*Lx);
 	for (i = 0; i < NumBand; i++) {
@@ -832,7 +894,7 @@ short int* aptool::EQ2(const short int *input, const int Lx, const double *ac, c
 		if (ymax < fabs(*(y_f + i))) ymax = fabs(*(y_f + i));
 	for (i = 0; i < Lx; i++) {
 		*(y_f + i) /= (ymax);
-		*(y1 + i) = (short int)(*(y_f + i)*32768.0);
+		*(y1 + i) = (short int)(*(y_f + i)*norm);
 	}
 
 	//printf("%f", pow(10, 1));
@@ -850,7 +912,79 @@ short int* aptool::EQ2(const short int *input, const int Lx, const double *ac, c
 	return y1;
 }
 
+void aptool::EQ2(const vector<short> &input,const double *ac, const double *Q,vector<short> &output){
+    SignalBasicFunc sbf;
+    double *y_f, *x, ymax = 1, A = 0, alpha = 0, *temp,rate=(double)fs/16000.,
+            a[3] = { 0,0,0 },
+            b[3] = { 0,0,0 },
+            z[3] = { 0, 0,0 },
+            wi[10] = { 0.0121736715326604,	0.0247400421470196,	0.0490873852123405,	0.0981747704246810,	0.196349540849362,	0.392699081698724,	0.785398163397448,	1.57079632679490,	3.14159265358979,	6.28318530717959 },
+            fi[10] = { 31*rate,63*rate,125*rate,250*rate,500*rate,1000*rate,2000*rate,4000*rate,8000*rate,160000*rate };
 
+
+    int i, k,Lx=input.size();
+    short int NumBand = 10;
+
+
+
+
+    x = (double*)malloc(sizeof(double)*Lx); assert(x);
+    y_f = (double*)malloc(sizeof(double)*Lx); assert(y_f);
+    temp = (double*)malloc(sizeof(double)*Lx); assert(temp);
+    memset(y_f, 0, sizeof(double)*Lx);
+    for (i = 0; i < NumBand; i++)
+        wi[i] = 2 * M_PI*fi[i] / fs;
+    for (i = 0; i < Lx; i++)
+        *(x + i) = input[i] / norm;
+
+    memcpy(temp, x, sizeof(double)*Lx);
+    for (i = 0; i < NumBand; i++) {
+        A = pow(10, ac[i] / 20);
+        alpha = sin(wi[i] / (2 * Q[i]));
+        b[0] = 1 + alpha*A;
+        b[1] = -2 * cos(wi[i]);
+        b[2] = 1 - alpha*A;
+        a[0] = 1 + alpha / A;
+        a[1] = -2 * cos(wi[i]);
+        a[2] = 1 - alpha / A;
+        //z[0] = 0; z[1] = 0; z[2] = 0;
+        for (k = 1; k < 3; k++)
+        {
+            a[k] /= a[0];
+            b[k] /= a[0];
+        }
+        b[0] /= a[0];
+        a[0] = 1;
+        sbf.filter(2, a, b, Lx - 1, temp, y_f);
+        memcpy(temp, y_f, sizeof(double)*Lx);
+
+    }
+
+
+    //y1 = (short int *)malloc(sizeof(short int)*Lx); assert(y1);
+    output.assign(Lx,0);
+    for (i = 0; i < Lx; i++)
+        if (ymax < fabs(*(y_f + i))) ymax = fabs(*(y_f + i));
+    for (i = 0; i < Lx; i++) {
+        *(y_f + i) /= (ymax);
+        output[i] = (short int)(*(y_f + i)*norm);
+    }
+
+    //printf("%f", pow(10, 1));
+   // output.assign(y1,y1+Lx);
+    if (x != NULL) {
+        free(x); x = NULL;
+    }
+
+    if (y_f != NULL) { free(y_f); y_f = NULL; }
+    //if (y1 != NULL) { free(y1); y1 = NULL; }
+
+    if (temp != NULL) {
+        free(temp); temp = NULL;
+    }
+
+
+}
 
 void aptool::PandFshift(const char *in, const char *out, const  double rate) {//���ߺ͹����ͬʱ�ı�
 
@@ -865,7 +999,7 @@ void aptool::PandFshift(const char *in, const char *out, const  double rate) {//
 	x = (double*)malloc(sizeof(double)*Lx); assert(x);
 
 	for (i = 0; i < Lx; i++)
-		*(x + i) = *(wav->indata + i) / 32768.0;
+		*(x + i) = *(wav->indata + i) / norm;
 
 	Lty = ceil(Lx *ratio);
 	ty = Time_Scaling(x, Lx, ratio);
@@ -875,7 +1009,7 @@ void aptool::PandFshift(const char *in, const char *out, const  double rate) {//
 	for (i = 0; i < Lpy; i++)
 		if (ymax < fabs(py[i])) ymax = fabs(py[i]);
 	for(i =0;i<Lpy;i++)
-		*(y1 + i) = py[i]/(ymax+0.3) * 32768.0;
+		*(y1 + i) = py[i]/(ymax+0.3) * norm;
 	wav->outbit = wav->inbit;
 	wav->outfs = wav->infs;
 	wav->outdatasize = Lx;
@@ -906,7 +1040,7 @@ short int* aptool::PandFshift(const short int *input, const int Lx, const double
 	x = (double*)malloc(sizeof(double)*Lx); assert(x);
 
 	for (i = 0; i < Lx; i++)
-		*(x + i) = *(input + i) / 32768.0;
+		*(x + i) = *(input + i) / norm;
 
 	Lty = ceil(Lx *ratio);
 	ty = Time_Scaling(x, Lx, ratio);
@@ -916,7 +1050,7 @@ short int* aptool::PandFshift(const short int *input, const int Lx, const double
 	for (i = 0; i < Lpy; i++)
 		if (ymax < fabs(py[i])) ymax = fabs(py[i]);
 	for(i=0;i<Lpy;i++)
-		*(y1 + i) = round(py[i]/(ymax+0.3) * 32768.0);
+		*(y1 + i) = round(py[i]/(ymax+0.3) * norm);
 
 	if (x != NULL) {
 		free(x); x = NULL;
@@ -931,6 +1065,47 @@ short int* aptool::PandFshift(const short int *input, const int Lx, const double
 	return y1;
 
 }
+void aptool::PandFshift(const vector<short> &input,const double rate, vector<short>& output){
+    double *ty, *py, *x, ratio,ymax=0;
+    int i, Lty, Lpy, p, q,Lx=input.size();
+    //short int *y1;
+
+    p = 100; q = rate * 100;
+    ratio = (double)q / (double)p;
+
+
+    x = (double*)malloc(sizeof(double)*Lx); assert(x);
+
+    for (i = 0; i < Lx; i++)
+        *(x + i) = input[i] / norm;
+
+    Lty = ceil(Lx *ratio);
+    ty = Time_Scaling(x, Lx, ratio);
+    py = resample(ty, Lty, p, q);
+    Lpy = Lty*p / q;
+    output.assign(Lpy,0);
+    //y1 = (short int *)malloc(sizeof(short int)*Lpy); assert(y1);
+    for (i = 0; i < Lpy; i++)
+        if (ymax < fabs(py[i])) ymax = fabs(py[i]);
+    for(i=0;i<Lpy;i++)
+        output[i] = round(py[i]/(ymax+0.3) * norm);
+
+    //output.assign(y1,y1+Lx);
+    if (x != NULL) {
+        free(x); x = NULL;
+    }
+   // if (y1 != NULL) {
+     //   free(y1); y1 = NULL;
+    //}
+    if (ty != NULL) {
+        free(ty); ty = NULL;
+    }
+    if (py != NULL) {
+        free(py); py = NULL;
+    }
+
+}
+
 
 void aptool::TimeScaling(const char *in, const char *out, const double rate) {//�޸�ʱ��
 
@@ -945,15 +1120,16 @@ void aptool::TimeScaling(const char *in, const char *out, const double rate) {//
 	x = (double*)malloc(sizeof(double)*Lx); assert(x);
 
 	for (i = 0; i < Lx; i++)
-		*(x + i) = *(wav->indata + i) / 32768.0;
+		*(x + i) = *(wav->indata + i) / norm;
+
 
 	Lty = ceil(Lx *ratio);
 	ty = Time_Scaling(x, Lx, ratio);
+	y1 = (short int *)calloc(Lty,sizeof(short int)); assert(y1);
 
 
-    y1 = (short int *)calloc(Lty,sizeof(short int)); assert(y1);
 	for (i = 0; i < Lty; i++)
-		*(y1 + i) = round(ty[i] * 32768.0);
+		*(y1 + i) = round(ty[i] * norm);
 	wav->outbit = wav->inbit;
 	wav->outfs = wav->infs;
 	wav->outdatasize = Lty;
@@ -981,7 +1157,7 @@ short int* aptool::TimeScaling(const short int* input, const int Lx, const doubl
 	x = (double*)calloc(Lx,sizeof(double)); assert(x);
 
 	for (i = 0; i < Lx; i++)
-		*(x + i) = *(input + i) / 32768.0;
+		*(x + i) = *(input + i) / norm;
 
 	Lty = ceil(Lx *ratio);
 	
@@ -994,7 +1170,7 @@ short int* aptool::TimeScaling(const short int* input, const int Lx, const doubl
 	for (i = 0; i < Lty; i++)
 		if (ymax < fabs(ty[i])) ymax = fabs(ty[i]);
 	for(i=0;i<Lty;i++)
-		*(y1 + i) = ty[i]/(ymax+0.05) * 32768.0;
+		*(y1 + i) = ty[i]/(ymax+0.05) * norm;
 
 	if (x != NULL) {
 		free(x); x = NULL;
@@ -1007,6 +1183,47 @@ short int* aptool::TimeScaling(const short int* input, const int Lx, const doubl
 
 
 }
+
+void aptool::TimeScaling(const vector<short> &input,const double rate, vector<short>& output){
+    double *ty, *x, ratio;
+    int i, Lty, p, q,Lx=input.size();
+    //short int *y1;
+
+    p = 100; q = rate * 100;
+    ratio = (double)q / (double)p;
+
+    x = (double*)calloc(Lx,sizeof(double)); assert(x);
+
+    for (i = 0; i < Lx; i++)
+        *(x + i) = input[i] / norm;
+
+    Lty = ceil(Lx *ratio);
+
+
+    ty = Time_Scaling(x, Lx, ratio);
+
+    output.assign(Lty,0);
+    //y1 = (short int *)calloc(Lty,sizeof(short int)); assert(y1);
+    double ymax = 0;
+    for (i = 0; i < Lty; i++)
+        if (ymax < fabs(ty[i])) ymax = fabs(ty[i]);
+    for(i=0;i<Lty;i++)
+        output[i] = ty[i]/(ymax+0.05) * norm;
+
+    //output.assign(y1,y1+Lty);
+
+    if (x != NULL) {
+        free(x); x = NULL;
+    }
+    if (ty != NULL) {
+        free(ty); ty = NULL;
+    }
+    //if (y1 != NULL) {
+      //  free(y1); y1 = NULL;
+    //}
+}
+
+
 /*void aptool::limiter1(const char *in, const char *out, const double tredB) {//��������ֻ�Ǽ򵥵Ľ��߹�ĳһ�ֱ�ʱ����
 double x, xd_last = 0, xd, slope = 1, rt = 0.01, at = 0.4,f=0,a,tresh =pow(10,tredB/20);
 int Lx,i;
@@ -1020,7 +1237,7 @@ y = (short int*)malloc(sizeof(short int)*Lx); assert(y);
 *y = 0;
 for (i = 1; i < Lx; i++)
 {
-x = *(wav->indata + i) / 32768.0;
+x = *(wav->indata + i) / norm;
 a = abs(x) - xd_last;
 if (a < 0) a = 0;
 xd = xd_last * (1 - rt) + at*a;
@@ -1029,7 +1246,7 @@ if (xd > tresh)
 f = pow(10, (-slope*(log10(xd) - log10(tresh))));
 else
 f = 1;
-*(y+i)=round(x*f*32768.0);
+*(y+i)=round(x*f*norm);
 }
 wav->outbit = wav->inbit;
 wav->outfs = wav->infs;
@@ -1053,14 +1270,14 @@ void aptool::Limiter2(const char *in, const  char *out, const  double CT, const 
 	//x = (double*)malloc(sizeof(double)*Lx); assert(x);
 	y = (short int*)malloc(sizeof(short int)*Lx); assert(y);
 	for (i = 0; i < Lx; i++) {
-		x = *(wav->indata + i) / 32768.0;
+		x = *(wav->indata + i) / norm;
 		X = log10(fabs(x));
 		G = CS*(CT - X) > ES*(ET - X) ? ES*(ET - X) : CS*(CT - X);
 		if (G > 0) G = 0;
 		f = pow(10, G / 20);
 		coeff = f < g ? at : rt;
 		g = (1 - coeff)*g + coeff*(f);
-		*(y + i) = round(x*g*32768.0);
+		*(y + i) = round(x*g*norm);
 	}
 	wav->outbit = wav->inbit;
 	wav->outfs = wav->infs;
@@ -1083,19 +1300,48 @@ short int* aptool::Limiter2(const short int* input, const int Lx, const  double 
 	//x = (double*)malloc(sizeof(double)*Lx); assert(x);
 	y = (short int*)malloc(sizeof(short int)*Lx); assert(y);
 	for (i = 0; i < Lx; i++) {
-		x = *(input + i) / 32768.0;
+		x = *(input + i) / norm;
 		X = log10(fabs(x));
 		G = CS*(CT - X) > ES*(ET - X) ? ES*(ET - X) : CS*(CT - X);
 		if (G > 0) G = 0;
 		f = pow(10, G / 20);
 		coeff = f < g ? at : rt;
 		g = (1 - coeff)*g + coeff*(f);
-		*(y + i) = round(x*g*32768.0);
+		*(y + i) = round(x*g*norm);
 	}
 
 
 	return y;
 }
+void aptool::Limiter2(const vector<short> &input,  const  double CT, const double CS, const double ET, const double ES, vector<short>& output){
+    double x, X, at = 0.003, rt = 0.003, delay = 150, xrms = 0, g = 1, G = 0, f = 0, coeff = 0;
+    int  i,Lx=input.size();
+    //short int *y;
+
+
+
+    output.assign(Lx,0);
+    //x = (double*)malloc(sizeof(double)*Lx); assert(x);
+    //y = (short int*)malloc(sizeof(short int)*Lx); assert(y);
+    for (i = 0; i < Lx; i++) {
+        x = input[i] / norm;
+        X = log10(fabs(x));
+        G = CS*(CT - X) > ES*(ET - X) ? ES*(ET - X) : CS*(CT - X);
+        if (G > 0) G = 0;
+        f = pow(10, G / 20);
+        coeff = f < g ? at : rt;
+        g = (1 - coeff)*g + coeff*(f);
+        output[i] = round(x*g*norm);
+    }
+
+    //output.assign(y,y+Lx);
+    //if(NULL!=y){free(y);y=NULL;}
+
+
+
+}
+
+
 
 void aptool::Compressing(const char *in, const  char *out, const  double type, const double Threshold, const double ratio, const double knee) {//ѹ����
 	double *x, *y_f;
@@ -1113,11 +1359,11 @@ void aptool::Compressing(const char *in, const  char *out, const  double type, c
 	y = (short int *)malloc(sizeof(short int)*Lx); assert(y);
 
 	for (i = 0; i < Lx; i++)
-		*(x + i) = *(wav->indata + i) / 32768.0;
+		*(x + i) = *(wav->indata + i) / norm;
 	comp->ffcompressor(type, x, Lx, wav->infs, Threshold, ratio, 0.001, 0.04, knee, y_f);
 
 	for (i = 0; i < Lx; i++)
-		*(y + i) = round(*(y_f + i)*32768.0);
+		*(y + i) = round(*(y_f + i)*norm);
 
 
 	wav->outbit = wav->inbit;
@@ -1139,7 +1385,7 @@ void aptool::Compressing(const char *in, const  char *out, const  double type, c
 
 short int* aptool::Compressing(const short int* input, const int Lx, const  short int type, const double Threshold, const double ratio, const double knee) {
 	double *x, *y_f;
-	int  i, fs = 16000;
+	int  i;
 	short int *y;
 	Compressor *comp = new Compressor();
 	x = (double*)malloc(sizeof(double)*Lx); assert(x);
@@ -1147,11 +1393,11 @@ short int* aptool::Compressing(const short int* input, const int Lx, const  shor
 	y = (short int *)malloc(sizeof(short int)*Lx); assert(y);
 
 	for (i = 0; i < Lx; i++)
-		*(x + i) = *(input + i) / 32768.0;
+		*(x + i) = *(input + i) / norm;
 	comp->ffcompressor(type, x, Lx, fs, Threshold, ratio, 0.001, 0.04, knee, y_f);
 
 	for (i = 0; i < Lx; i++)
-		*(y + i) = round(*(y_f + i)*32768.0);
+		*(y + i) = round(*(y_f + i)*norm);
 
 
 	if (x != NULL) {
@@ -1163,6 +1409,39 @@ short int* aptool::Compressing(const short int* input, const int Lx, const  shor
 	delete comp;
 	return y;
 }
+
+
+void aptool::Compressing(const vector<short>& input,const  short int type, const double Threshold, const double ratio, const double knee,vector<short>&output){
+    double *x, *y_f;
+    int  i, Lx=input.size();
+    //short int *y;
+    Compressor *comp = new Compressor();
+    x = (double*)malloc(sizeof(double)*Lx); assert(x);
+    y_f = (double*)malloc(sizeof(double)*Lx); assert(y_f);
+    //y = (short int *)malloc(sizeof(short int)*Lx); assert(y);
+    output.assign(Lx,0);
+    for (i = 0; i < Lx; i++)
+        *(x + i) = input[i] / norm;
+    comp->ffcompressor(type, x, Lx, fs, Threshold, ratio, 0.001, 0.04, knee, y_f);
+
+    for (i = 0; i < Lx; i++)
+        output[i] = round(*(y_f + i)*norm);
+
+
+//    output.assign(y,y+Lx);
+    if (x != NULL) {
+        free(x); x = NULL;
+    }
+  //  if (y != NULL) {
+    //    free(y); y = NULL;
+    //}
+    if (y_f != NULL) {
+        free(y_f); y_f = NULL;
+    }
+    delete comp;
+
+}
+
 
 void aptool::Delay(const char *in, const char *out, const double ratio) {
 	double *x, *y_f, amp[11] = { 0 };
@@ -1178,7 +1457,7 @@ void aptool::Delay(const char *in, const char *out, const double ratio) {
 	memset(x, 0, sizeof(double)*Ly);
 	for (i = 0; i < Lx; i++)
 	{
-		*(x + i + 1) = *(wav->indata + i) / 32768.0;
+		*(x + i + 1) = *(wav->indata + i) / norm;
 		*(y_f + i + 1) = *(x + i + 1);
 	}
 	for (i = 1; i <= no_delays; i++) {
@@ -1193,7 +1472,7 @@ void aptool::Delay(const char *in, const char *out, const double ratio) {
 		}
 	}
 	for (i = 0; i < Ly; i++)
-		*(y + i) = round(*(y_f + i)*32768.0);
+		*(y + i) = round(*(y_f + i)*norm);
 
 
 	wav->outbit = wav->inbit;
@@ -1224,7 +1503,7 @@ short int* aptool::Delay(const short int* input, const int Lx, const double rati
 	memset(x, 0, sizeof(double)*Ly);
 	for (i = 0; i < Lx; i++)
 	{
-		*(x + i + 1) = *(input + i) / 32768.0;
+		*(x + i + 1) = *(input + i) / norm;
 		*(y_f + i + 1) = *(x + i + 1);
 	}
 	for (i = 1; i <= no_delays; i++) {
@@ -1241,7 +1520,7 @@ short int* aptool::Delay(const short int* input, const int Lx, const double rati
 	for (i = 0; i < Ly; i++)
 		if (ymax < fabs(y_f[i])) ymax = fabs(y_f[i]);
 	for(i=0;i<Ly;i++)
-		*(y + i) = y_f[i]/(ymax+0.3)*32768.0;
+		*(y + i) = y_f[i]/(ymax+0.3)*norm;
 
 	if (x != NULL) {
 		free(x); x = NULL;
@@ -1251,6 +1530,52 @@ short int* aptool::Delay(const short int* input, const int Lx, const double rati
 	}
 	return y;
 }
+void  aptool::Delay(const vector<short> &input, const double ratio, vector<short>& output){
+    double *x, *y_f, amp[11] = { 0 },ymax=0;
+    int samp_delay = 2000, zero_padding = 10 * samp_delay, i,Lx=input.size(),Ly;
+    short int  no_delays = 10, j;
+
+    Ly = Lx + zero_padding + 1;
+    x = (double*)calloc(Ly,sizeof(double)); assert(x);
+    y_f = (double*)calloc(Ly,sizeof(double)); assert(y_f);
+    output.assign(Ly,0);
+    //y = (short int *)calloc(Ly,sizeof(short int)); assert(y);
+    memset(x, 0, sizeof(double)*Ly);
+    for (i = 0; i < Lx; i++)
+    {
+        *(x + i + 1) = input[i] / norm;
+        *(y_f + i + 1) = *(x + i + 1);
+    }
+    for (i = 1; i <= no_delays; i++) {
+        amp[i] = 1 - i*ratio;
+    }
+
+    for (i = samp_delay; i < Ly; i++) {
+        for (j = 1; j <= no_delays; j++) {
+            if (i >(j*samp_delay))
+                if (amp[j] > 0)
+                    *(y_f + i) += amp[j] * *(x + (i - j*samp_delay));
+        }
+    }
+    for (i = 0; i < Ly; i++)
+        if (ymax < fabs(y_f[i])) ymax = fabs(y_f[i]);
+    for(i=0;i<Ly;i++)
+        output[i] = y_f[i]/(ymax+0.3)*norm;
+
+    //output.assign(y,y+Ly);
+    if (x != NULL) {
+        free(x); x = NULL;
+    }
+    //if (y != NULL) {
+     //   free(y); y = NULL;
+    //}
+    if (y_f != NULL) {
+        free(y_f); y_f = NULL;
+    }
+
+}
+
+
 
 void aptool::ReverbConv(const char *in1, const char *in2, const char *out, const double wet, const double dry) {
 	double *x, *h, *y_f, ymax = 0, delay;
@@ -1263,14 +1588,14 @@ void aptool::ReverbConv(const char *in1, const char *in2, const char *out, const
 	Lx = wav->indatasize / 2;
 	x = (double*)calloc(Lx, sizeof(double)); assert(x);
 	for (i = 0; i < Lx; i++)
-		*(x + i) = wav->indata[i] / 32768.0;
+		*(x + i) = wav->indata[i] / norm;
 
 	wav1->wavRead(in2);
 	Lh = wav1->indatasize / 2;
 
 	h = (double*)calloc(Lh, sizeof(double)); assert(h);
 	for (i = 0; i < Lh; i++)
-		*(h + i) = wav1->indata[i] / 32768.0;
+		*(h + i) = wav1->indata[i] / norm;
 
 	Ly = Lx + Lh - 1;
 	y_f = (double*)calloc(Ly, sizeof(double)); assert(y_f);
@@ -1322,7 +1647,7 @@ short int* aptool::ReverbConv(const short int* input1, const int Lx, const short
 	x = (double*)calloc(Lx, sizeof(double)); assert(x);
 	for (i = 0; i < Lx; i++)
 	{
-		*(x + i) = input1[i] / 32768.0;
+		*(x + i) = input1[i] / norm;
 
 	}
 
@@ -1330,7 +1655,7 @@ short int* aptool::ReverbConv(const short int* input1, const int Lx, const short
 
 	h = (double*)calloc(Lh, sizeof(double)); assert(h);
 	for (i = 0; i < Lh; i++)
-		*(h + i) = input2[i] / 32768.0;
+		*(h + i) = input2[i] / norm;
 
 	Ly = Lx + Lh - 1;
 	y_f = (double*)calloc(Ly, sizeof(double)); assert(y_f);
@@ -1366,7 +1691,62 @@ short int* aptool::ReverbConv(const short int* input1, const int Lx, const short
 	return y;
 	
 }
+void aptool::ReverbConv(const vector<short> &input1, const vector<short>& input2, const double wet, const double dry,vector<short>&output){
+    double *x, *h, *y_f, ymax = 0, delay;
+    int Ly;
+    int i,Lx=input1.size(),Lh=input2.size();
+    short int *y;
 
+
+
+    x = (double*)calloc(Lx, sizeof(double)); assert(x);
+    for (i = 0; i < Lx; i++)
+    {
+        *(x + i) = input1[i] / norm;
+
+    }
+
+
+
+    h = (double*)calloc(Lh, sizeof(double)); assert(h);
+    for (i = 0; i < Lh; i++)
+        *(h + i) = input2[i] / norm;
+
+    Ly = Lx + Lh - 1;
+    y_f = (double*)calloc(Ly, sizeof(double)); assert(y_f);
+    y = (short int*)calloc(Ly, sizeof(short int)); assert(y);
+    convReverb(x, Lx, h, Lh, y_f);
+    for (i = 0; i < Ly; i++)
+    {
+        if (i < Lx)
+        {
+            *(y_f + i) = *(y_f + i) * wet + *(x + i)*dry;
+            if (ymax < fabs(*(y_f + i)))
+                ymax = fabs(*(y_f + i));
+        }
+    }
+    delay = 1;
+    for (i = 0; i < Ly - Lh / 2; i++)
+    {
+
+        if (i > Lx + Lh / 4)
+        {
+            *(y + i) = round(*(y_f + i) / (ymax+0.1) * 32768 * delay);
+            delay -= 1 / Lh / 4;
+        }
+        else
+            *(y + i) = round(*(y_f + i) / (ymax+0.1) * 32768);
+    }
+
+
+    Ly -= Lh / 2;
+    output.assign(y,y+Ly);
+    if (NULL != y_f) { free(y_f); y_f = NULL; }
+    if (NULL != h) { free(h); h = NULL; }
+    if (NULL != x) { free(x); x = NULL; }
+    if (NULL != y) {free(y);y=NULL;}
+
+}
 
 short int* aptool::Robotization(const short *input, const int Lx, short type, int fs, double RMfre, int outwin) {
 	short *y;
@@ -1377,14 +1757,41 @@ short int* aptool::Robotization(const short *input, const int Lx, short type, in
 	return y;
 }
 
+void aptool::Robotization(const vector<short> &input, short type, double RMfre, int outwin,vector<short> &output){
+//    short *y;
+    int Lx=input.size();
+    RobotSound *robotsound = new RobotSound();
+//    y = (short*)calloc(Lx, sizeof(short)); assert(y);
+    output.assign(Lx,0);
+    robotsound->Robot(&input[0], Lx, &output[0], type, fs, RMfre, outwin);
+    delete robotsound;
+//    output.assign(y,y+Lx);
+//    if(NULL!=y){free(y);y=NULL;}
+
+}
+
+
+
+
+
 short int* aptool::Whisper(const short *input, const int Lx, int &Ly,int p) {
 	short *y;
+
 	RobotSound *robotsound = new RobotSound();
 	robotsound->WhisperSound(input, Lx, &y, Ly,p);
 	delete robotsound;
 	return y;
 }
 
+void aptool::Whisper(const vector<short> &input, int p, vector<short> &output) {
+    short *y;
+    int Lx=input.size(),Ly;
+    RobotSound *robotsound = new RobotSound();
+    robotsound->WhisperSound(&input[0], Lx, &y, Ly,p);
+    delete robotsound;
+    output.assign(y,y+Ly);
+    if(NULL!=y){free(y);y=NULL;}
+}
 
 short int * aptool::VibratoProcesse(const short *input, const int Lx,const int fs, const double modfreq, const double width) {
 	short *y;
@@ -1392,6 +1799,17 @@ short int * aptool::VibratoProcesse(const short *input, const int Lx,const int f
 	VibratoEffect(input, Lx, fs,y, modfreq, width);
 	return y;
 }
+
+void aptool::VivratoProcesse(const vector<short> &input, const double modfreq, const double width,
+                             vector<short> &output) {
+    short *y;
+    int Lx=input.size();
+    y = (short*)calloc(Lx, sizeof(short)); assert(y);
+    VibratoEffect(&input[0], Lx, fs,y, modfreq, width);
+    output.assign(y,y+Lx);
+    if(NULL!=y){free(y);y=NULL;}
+}
+
 
 short int* aptool::FormantChange(const short *input, const int Lx, const double warp_rate) {
 	FS *formantS = new FS();
@@ -1401,14 +1819,14 @@ short int* aptool::FormantChange(const short *input, const int Lx, const double 
 	x_f = (double *)calloc(Lx, sizeof(double)); assert(x_f);
 	y = (short*)calloc(Lx, sizeof(short)); assert(y);
 	for (int i = 0; i < Lx; i++) {
-		*(x_f + i) = *(input + i) / 32768.0;
+		*(x_f + i) = *(input + i) / norm;
 	}
 	formantS->FormantWarp(x_f, Lx, &y_f, warp_rate);
 
 	for (int i = 0; i < Lx; i++)
 		if (ymax < fabs(*(y_f + i))) ymax = fabs(*(y_f + i));
 	for (int i = 0; i < Lx; i++)
-		*(y + i) = *(y_f + i)/(ymax+0.3) * 32768.0;
+		*(y + i) = *(y_f + i)/(ymax+0.3) * norm;
 
 	if (x_f) { free(x_f); x_f = NULL; }
 	if (y_f) { free(y_f); y_f = NULL; }
@@ -1418,22 +1836,47 @@ short int* aptool::FormantChange(const short *input, const int Lx, const double 
 	
 }
 
+void aptool::FormantChange(const vector<short> &input, const double warp_rate, vector<short> &output) {
+    FS *formantS = new FS();
+    double *x_f,*y_f,ymax=0;
+//    short *y;
+    int Lx=input.size();
+
+    output.assign(Lx,0);
+    x_f = (double *)calloc(Lx, sizeof(double)); assert(x_f);
+//    y = (short*)calloc(Lx, sizeof(short)); assert(y);
+    for (int i = 0; i < Lx; i++) {
+        *(x_f + i) = input[i] / norm;
+    }
+    formantS->FormantWarp(x_f, Lx, &y_f, warp_rate);
+
+    for (int i = 0; i < Lx; i++)
+        if (ymax < fabs(*(y_f + i))) ymax = fabs(*(y_f + i));
+    for (int i = 0; i < Lx; i++)
+        output[i] = *(y_f + i)/(ymax+0.3) * norm;
+//    output.assign(y,y+Lx);
+    if (x_f) { free(x_f); x_f = NULL; }
+    if (y_f) { free(y_f); y_f = NULL; }
+//    if(y){free(y);y=NULL;}
+
+}
+
 short int* aptool::Chorus(const short*input, const int Lx, const short num_chorus, int &Ly,const double *rato, const double *gain, const double *shift_time) {
-	vector<double> temp;
+
 	double maxtime = 0,ymax=0;
-	int Ly1, fs = 16000, delaytime;
+	int Ly1,  delaytime;
 	short *yout,*y;
-	
-	
-	for (int i = 0; i < Lx; i++)
-		temp.push_back((double)*(input + i));
+
+
 	for (int i = 0; i < num_chorus; i++)
 		maxtime = maxtime > shift_time[i]? maxtime:shift_time[i];
 	delaytime = maxtime*fs;
 	Ly = Lx + delaytime;
+    vector<double> temp(Ly,0.0);
+    for (int i = 0; i < Lx; i++)
+        temp[i]=((double)*(input + i));
 	y = (short*)calloc(Ly, sizeof(short)); assert(y);
-	for (int i = Lx; i < Ly; i++)
-		temp.push_back(0.0);
+
 	for (int i = 0; i < num_chorus; i++) {
 		yout = PandFshift(input, Lx, rato[i], Ly1);
 		delaytime = shift_time[i] * fs;
@@ -1446,7 +1889,22 @@ short int* aptool::Chorus(const short*input, const int Lx, const short num_choru
 		ymax = ymax > temp[i] ? ymax : temp[i];
 
 	for (int i = 0; i < Ly; i++)
-		*(y + i) = temp[i] / (0.3*32768.0 + ymax)*32768.0;
+		*(y + i) = temp[i] / (0.3*norm + ymax)*norm;
 	return y;
 
+}
+
+void aptool::Gain(const vector<short> &input, vector<short> &output,float gain){
+    float toLinear = powf(10.,gain/20.);
+    output.assign(input.begin(),input.end());
+    size_t size = input.size();
+    for(size_t i =0 ;i< size;i++){
+        int temp = int((float)input[i]*toLinear);
+        if (temp>int(norm))
+            temp=norm-1;
+        else if(temp<-norm)
+            temp = -norm+2;
+        output[i]=(short)temp;
+
+    }
 }

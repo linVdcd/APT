@@ -1,5 +1,5 @@
 /*-----------------------------------
-	ÁÖÃ÷°² 2016.4.27
+	ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ 2016.4.27
 	Time scaling based on locked phase vocoder;
 */
 
@@ -29,9 +29,9 @@ OsFlt64 *Time_Scaling(OsFlt64 *input, const OsInt32 Lx,const OsFlt64 time_scalin
 			*sp,						*phase_increment,			   *systhesis_frame,
 			COLA_ratio=0.0,				ttt;
 	
-	OsInt32 i,j,pin = 0, pout = 0, Ly = round(time_scaling_ratio*Lx);
+	OsInt32 i,j,pin = 0, pout = 0, Ly = int(time_scaling_ratio*Lx);
 
-	OsInt16 NFFT = 512, frame_length = NFFT, *peaks, cp, *regions,
+	OsInt16 NFFT = 256, frame_length = NFFT, *peaks, cp, *regions,
 		    synthesis_frame_shift = frame_length / 4,
 		    analysis_frame_shift = round(synthesis_frame_shift / time_scaling_ratio);
 
@@ -89,10 +89,10 @@ OsFlt64 *Time_Scaling(OsFlt64 *input, const OsInt32 Lx,const OsFlt64 time_scalin
 
 	while ((pin + frame_length < Lx) && (pout + frame_length < Ly))
 	{
-		memcpy(analysis_frame, input + pin, sizeof(OsFlt64)*frame_length);// ¶ÁÈ¡Ò»Ö¡Êý¾Ý
+		memcpy(analysis_frame, input + pin, sizeof(OsFlt64)*frame_length);// ï¿½ï¿½È¡Ò»Ö¡ï¿½ï¿½ï¿½ï¿½
 
 		for (i = 0; i < NFFT; i++)
-			*(analysis_frame + i) *= *(window + i);//¼Ó´°
+			*(analysis_frame + i) *= *(window + i);//ï¿½Ó´ï¿½
 
 		/*=======================================================================
 					shif move the data,like this: [1 2 3 4]->[3 4 1 2]
@@ -115,9 +115,9 @@ OsFlt64 *Time_Scaling(OsFlt64 *input, const OsInt32 Lx,const OsFlt64 time_scalin
 
 		for (i = 0; i < NFFT / 2; i++)
 		{
-			*(this_analysis_phase + i) = atan2(dft_half[i].i, dft_half[i].r);//ÏàÎ»
-			*(sp + i) = sqrt(dft_half[i].r*dft_half[i].r + dft_half[i].i*dft_half[i].i);//·ùÖµ
-			*(delta_phase + i) = *(this_analysis_phase + i) - *(last_analysis_phase + i);//»ñÈ¡Ö¡Ö®¼äµÄÏàÎ»²î
+			*(this_analysis_phase + i) = atan2(dft_half[i].i, dft_half[i].r);//ï¿½ï¿½Î»
+			*(sp + i) = sqrt(dft_half[i].r*dft_half[i].r + dft_half[i].i*dft_half[i].i);//ï¿½ï¿½Öµ
+			*(delta_phase + i) = *(this_analysis_phase + i) - *(last_analysis_phase + i);//ï¿½ï¿½È¡Ö¡Ö®ï¿½ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½
 			*(phase_increment + i) = *(delta_phase + i) - analysis_frame_shift* (*(DFT_bin_freqs + i));
 
 		}
@@ -126,6 +126,21 @@ OsFlt64 *Time_Scaling(OsFlt64 *input, const OsInt32 Lx,const OsFlt64 time_scalin
 		if (peaks) { free(peaks); peaks = NULL; }
 		peaks = (OsInt16 *)malloc(sizeof(OsInt16)); assert(peaks);
 
+
+        /*=======================================================================
+					creat the output data phase whit locked
+		========================================================================*/
+        for (i = 0; i < NFFT / 2; i++) // without locked
+        {
+            ttt = fmod(*(phase_increment + i) + M_PI, M_PI * 2.0);
+            if (ttt < 0)
+                ttt += 2 * M_PI;
+            *(principal_determination +  i) = ttt - M_PI;
+
+            *(partials_freq +  i) = *(principal_determination +  i) / analysis_frame_shift + *(DFT_bin_freqs + i);
+            *(this_synthesis_phase +  i) = *(last_synthesis_phase +i) + synthesis_frame_shift * (*(partials_freq + i));
+
+        }
 
 		/*=======================================================================
 										find peaks
@@ -152,41 +167,41 @@ OsFlt64 *Time_Scaling(OsFlt64 *input, const OsInt32 Lx,const OsFlt64 time_scalin
 		/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
 
 
-		/*=======================================================================
-					creat the output data phase whit locked
-		========================================================================*/
-		memset(principal_determination, 0, sizeof(OsFlt64)*NFFT / 2);
-		memset(partials_freq, 0, sizeof(OsFlt64)*NFFT / 2);
-		for (i = 0; i < cp; i++)
-		{
 
-			ttt = fmod(*(phase_increment + *(peaks + i)) + M_PI, M_PI * 2.0);
-			if (ttt < 0)
-				ttt += 2 * M_PI;
-			*(principal_determination + *(peaks + i)) = ttt - M_PI;
+        //with locked
+        /*memset(principal_determination, 0, sizeof(OsFlt64)*NFFT / 2);
+        memset(partials_freq, 0, sizeof(OsFlt64)*NFFT / 2);
+        for (i = 0; i < cp; i++)
+        {
 
-			*(partials_freq + *(peaks + i)) = *(principal_determination + *(peaks + i)) / analysis_frame_shift + *(DFT_bin_freqs + *(peaks + i));
-		}
+            ttt = fmod(*(phase_increment + *(peaks + i)) + M_PI, M_PI * 2.0);
+            if (ttt < 0)
+                ttt += 2 * M_PI;
+            *(principal_determination + *(peaks + i)) = ttt - M_PI;
 
-		
-		for (i = 0; i < cp - 1; i++)
-			*(regions + i + 1) = round(0.5*(*(peaks + i) + *(peaks + i + 1)));
-		*regions = 0; *(regions + cp) = NFFT / 2 - 1;
-
-		for (i = 0; i < cp; i++)
-		{
-			for (j = *(regions + i); j <= *(regions + i + 1); j++)
-				*(partials_freq + j) = *(partials_freq + *(peaks + i));
-			*(this_synthesis_phase + *(peaks + i)) = *(last_synthesis_phase + *(peaks + i)) + synthesis_frame_shift * (*(partials_freq + *(peaks + i)));
-		}
+            *(partials_freq + *(peaks + i)) = *(principal_determination + *(peaks + i)) / analysis_frame_shift + *(DFT_bin_freqs + *(peaks + i));
+        }
 
 
-		for (i = 0; i < cp; i++)
-		{
-			for (j = *(regions + i); j <= *(regions + i + 1); j++)
-				*(this_synthesis_phase + j) = *(this_synthesis_phase + *(peaks + i)) + *(this_analysis_phase + j) - *(this_analysis_phase + *(peaks + i));
+        for (i = 0; i < cp - 1; i++)
+            *(regions + i + 1) = round(0.5*(*(peaks + i) + *(peaks + i + 1)));
+        *regions = 0; *(regions + cp) = NFFT / 2 - 1;
 
-		}
+        for (i = 0; i < cp; i++)
+        {
+            for (j = *(regions + i); j <= *(regions + i + 1); j++)
+                *(partials_freq + j) = *(partials_freq + *(peaks + i));
+            *(this_synthesis_phase + *(peaks + i)) = *(last_synthesis_phase + *(peaks + i)) + synthesis_frame_shift * (*(partials_freq + *(peaks + i)));
+        }
+
+
+        for (i = 0; i < cp; i++)
+        {
+            for (j = *(regions + i); j <= *(regions + i + 1); j++)
+                *(this_synthesis_phase + j) = *(this_synthesis_phase + *(peaks + i)) + *(this_analysis_phase + j) - *(this_analysis_phase + *(peaks + i));
+
+        }*/
+
 		/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
 
 
@@ -200,10 +215,11 @@ OsFlt64 *Time_Scaling(OsFlt64 *input, const OsInt32 Lx,const OsFlt64 time_scalin
 			//out_dft[i].imag = this_synthesis_phase[i];
 			out_dft[i] = complex<double>(0, this_synthesis_phase[i]);
 			out_dft[i] = exp(out_dft[i]);
-			
+		
 			//out_dft[i].imag *= *(sp + i);
 			//out_dft[i].real *= *(sp + i);
 			out_dft[i] *= complex<double>(*(sp + i), *(sp + i));
+			
 
 		}
 		
@@ -251,7 +267,7 @@ OsFlt64 *Time_Scaling(OsFlt64 *input, const OsInt32 Lx,const OsFlt64 time_scalin
 
 
 		for (i = 0; i < NFFT; i++)
-			*(systhesis_frame + i) *= *(window + i);//¼Ó´°
+			*(systhesis_frame + i) *= *(window + i);//ï¿½Ó´ï¿½
 		for (i = pout; i < pout + frame_length; i++)
 			*(output_signal + i) += *(systhesis_frame + i - pout);
 		memcpy(last_synthesis_phase, this_synthesis_phase, sizeof(OsFlt64)*NFFT / 2);

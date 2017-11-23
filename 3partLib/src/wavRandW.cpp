@@ -1,5 +1,5 @@
 /*-----------------------------------
-	ÁÖÃ÷°² 2016.4.25
+	ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ 2016.4.25
 	A wav file reader and writer interface.
 */
 
@@ -49,7 +49,7 @@ void wavRandW::wavRead(const char *filename){
 void wavRandW::wavWrite(const char *filename){
 	WavWriter *pWriter = new WavWriter(); 
 	assert(0 != pWriter);
-	bool bRet = pWriter->Open(filename, outfs, outbit, 1); if (bRet == NULL) { printf("%s ´ò¿ªÊ§°Ü£¡ÎÄ¼þ±»Õ¼ÓÃ£¬Çë¹Ø±ÕÖØÊÔ¡£\n", filename); return; }
+	bool bRet = pWriter->Open(filename, outfs, outbit, 1); if (bRet == NULL) { printf("%s ï¿½ï¿½Ê§ï¿½Ü£ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½Õ¼ï¿½Ã£ï¿½ï¿½ï¿½Ø±ï¿½ï¿½ï¿½ï¿½Ô¡ï¿½\n", filename); return; }
 	//assert(true == bRet);
 	if (outdatasize > 0)
 		pWriter->Write(outdata, outdatasize);
@@ -57,12 +57,15 @@ void wavRandW::wavWrite(const char *filename){
 	delete pWriter;
 }
 wavRandW::~wavRandW(){
-	if (NULL != indata)
+	if (NULL != indata) {
 		free(indata);
+		indata=NULL;
+	}
 	/*if (NULL != outdata)
 	{
-		printf("free");
+
 		free(outdata);
+		outdata=NULL;
 	}*/
 		
 }
